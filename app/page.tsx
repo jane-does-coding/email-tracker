@@ -1,25 +1,14 @@
 "use client";
 import { useState, useEffect } from "react";
 
-interface EmailLog {
-	timestamp: string;
-	ip: string;
-	userAgent: string;
-	isRealOpen: boolean;
-	reason?: string;
-}
-
 export default function Home() {
 	const [trackingId, setTrackingId] = useState("");
-	const [realOpens, setRealOpens] = useState<EmailLog[]>([]);
-	const [allRequests, setAllRequests] = useState<EmailLog[]>([]);
-	const [showAllRequests, setShowAllRequests] = useState(false);
+	const [logs, setLogs] = useState<string[]>([]);
 
 	const generate = () => {
 		const id = crypto.randomUUID();
 		setTrackingId(id);
-		setRealOpens([]);
-		setAllRequests([]);
+		setLogs([]);
 	};
 
 	const trackingUrl =
@@ -33,17 +22,11 @@ export default function Home() {
 		const fetchLogs = async () => {
 			const res = await fetch(`/api/track-logs/${trackingId}`);
 			const data = await res.json();
-			setRealOpens(data);
-
-			// Fetch all requests (you'd need another endpoint for this)
-			const allRes = await fetch(`/api/track-all/${trackingId}`);
-			const allData = await allRes.json();
-			setAllRequests(allData);
+			setLogs(data);
 		};
 
 		fetchLogs();
-
-		const interval = setInterval(fetchLogs, 3000);
+		const interval = setInterval(fetchLogs, 2000);
 		return () => clearInterval(interval);
 	}, [trackingId]);
 
@@ -55,7 +38,11 @@ export default function Home() {
 				</h1>
 				<p className="text-gray-600 mb-6 text-center max-w-md">
 					Generate a tracking pixel for your emails and see when they are
-					actually opened by real people.
+					opened.
+					<br />
+					<span className="text-sm">
+						✅ = Real open | 🚫 = Filtered (bot/duplicate)
+					</span>
 				</p>
 
 				<button
@@ -83,78 +70,39 @@ export default function Home() {
 							className="w-full h-24 p-3 rounded-md border border-gray-200 text-sm font-mono bg-gray-50 text-gray-700"
 						/>
 
-						<div className="mt-6">
-							<div className="flex justify-between items-center mb-4">
-								<h2 className="text-xl font-semibold text-gray-800">
-									✅ Real Opens ({realOpens.length})
-								</h2>
-								<button
-									onClick={() => setShowAllRequests(!showAllRequests)}
-									className="text-sm text-gray-500 hover:text-gray-700 underline"
-								>
-									{showAllRequests ? "Hide" : "Show"} all requests (
-									{allRequests.length})
-								</button>
-							</div>
-
-							{realOpens.length > 0 ? (
-								<div className="space-y-2 max-h-96 overflow-y-auto">
-									{realOpens.map((log, i) => (
-										<div
-											key={i}
-											className="bg-green-50 border-l-4 border-green-500 p-3"
-										>
-											<div className="text-sm font-mono">
-												<span className="font-bold">
-													🕐 {new Date(log.timestamp).toLocaleString()}
-												</span>
-												<span className="mx-2">•</span>
-												<span>🌐 {log.ip}</span>
-											</div>
-											<div className="text-xs text-gray-600 mt-1 break-all">
-												{log.userAgent.substring(0, 100)}...
-											</div>
-										</div>
-									))}
-								</div>
-							) : (
-								<p className="text-gray-400 italic">
-									No real opens detected yet
-								</p>
-							)}
-
-							{showAllRequests && allRequests.length > 0 && (
-								<div className="mt-6">
-									<h3 className="text-md font-semibold text-gray-600 mb-2">
-										🚫 Filtered Out Requests (
-										{allRequests.length - realOpens.length})
-									</h3>
-									<div className="space-y-2 max-h-96 overflow-y-auto">
-										{allRequests
-											.filter((log) => !log.isRealOpen)
-											.map((log, i) => (
-												<div
-													key={i}
-													className="bg-gray-50 border-l-4 border-gray-300 p-3"
-												>
-													<div className="text-sm font-mono">
-														<span>
-															🕐 {new Date(log.timestamp).toLocaleString()}
-														</span>
-														<span className="mx-2">•</span>
-														<span>🌐 {log.ip}</span>
-													</div>
-													<div className="text-xs text-gray-500 mt-1">
-														Filtered: {log.reason}
-													</div>
-													<div className="text-xs text-gray-400 mt-1 break-all">
-														{log.userAgent.substring(0, 80)}...
-													</div>
-												</div>
-											))}
+						<h2 className="text-xl font-semibold text-gray-800 mt-6 mb-2">
+							📊 Open Logs
+						</h2>
+						{logs.length > 0 ? (
+							<div className="space-y-2 max-h-96 overflow-y-auto">
+								{logs.map((log, i) => (
+									<div
+										key={i}
+										className={`p-2 rounded text-sm font-mono ${
+											log.includes("✅")
+												? "bg-green-50 border-l-4 border-green-500"
+												: "bg-gray-50 border-l-4 border-gray-400"
+										}`}
+									>
+										{log}
 									</div>
-								</div>
-							)}
+								))}
+							</div>
+						) : (
+							<p className="text-gray-400 italic">
+								No requests yet. Send a test email!
+							</p>
+						)}
+
+						<div className="mt-4 text-xs text-gray-500">
+							<p>
+								💡 <strong>Note:</strong> Only the first request from each IP
+								within 30 seconds is counted as a real open.
+							</p>
+							<p>
+								🤖 Known bots (GoogleImageProxy, Facebook, etc.) are
+								automatically filtered out.
+							</p>
 						</div>
 					</div>
 				)}

@@ -1,21 +1,16 @@
 import { NextRequest } from "next/server";
 import { openedEmails, EmailLog } from "../shared";
 
-// Known bot patterns to filter out
+// Only filter out known bots, not regular browsers
 const botPatterns = [
 	"googleimageproxy",
 	"googleusercontent",
-	"bot",
-	"crawler",
-	"spider",
-	"prefetch",
-	"whatsapp",
 	"facebookexternalhit",
 	"linkedinbot",
 	"slackbot",
 	"telegrambot",
 	"discordbot",
-	"applebot",
+	"whatsapp",
 	"bingbot",
 	"duckduckbot",
 	"yandexbot",
@@ -26,87 +21,9 @@ const botPatterns = [
 	"mj12bot",
 ];
 
-// Genuine email client patterns
-const emailClientPatterns = [
-	"outlook",
-	"gmail",
-	"apple mail",
-	"thunderbird",
-	"mail.app",
-	"ios mail",
-	"android mail",
-	"spark",
-	"canary mail",
-	"airmail",
-	"edison mail",
-	"polymail",
-];
-
-function isBot(userAgent: string): boolean {
+function isKnownBot(userAgent: string): boolean {
 	const lowerUA = userAgent.toLowerCase();
 	return botPatterns.some((pattern) => lowerUA.includes(pattern));
-}
-
-function isEmailClient(userAgent: string): boolean {
-	const lowerUA = userAgent.toLowerCase();
-	return emailClientPatterns.some((pattern) => lowerUA.includes(pattern));
-}
-
-function shouldLogAsRealOpen(
-	userAgent: string,
-	accept: string,
-	openedEmailsForId: EmailLog[],
-	ip: string
-): { shouldLog: boolean; reason: string } {
-	const lowerUA = userAgent.toLowerCase();
-
-	// Check 1: Bot detection
-	if (isBot(userAgent)) {
-		return { shouldLog: false, reason: "Bot detected" };
-	}
-
-	// Check 2: Accept header check (real email clients ask for images)
-	const acceptsImages =
-		accept.includes("image/png") ||
-		accept.includes("image/*") ||
-		(accept.includes("*/*") && !accept.includes("text/html"));
-
-	if (!acceptsImages) {
-		return { shouldLog: false, reason: "Doesn't accept images" };
-	}
-
-	// Check 3: Deduplication - only log one open per IP per hour
-	const oneHourAgo = Date.now() - 60 * 60 * 1000;
-	const recentLogFromIP = openedEmailsForId?.some(
-		(log) =>
-			log.ip === ip &&
-			new Date(log.timestamp).getTime() > oneHourAgo &&
-			log.isRealOpen === true
-	);
-
-	if (recentLogFromIP) {
-		return {
-			shouldLog: false,
-			reason: "Duplicate from same IP within last hour",
-		};
-	}
-
-	// Check 4: If it's a known email client or not a common browser
-	const isCommonBrowser =
-		lowerUA.includes("chrome") ||
-		lowerUA.includes("safari") ||
-		lowerUA.includes("firefox") ||
-		lowerUA.includes("edge");
-
-	if (isEmailClient(userAgent)) {
-		return { shouldLog: true, reason: "Known email client" };
-	}
-
-	if (!isCommonBrowser) {
-		return { shouldLog: true, reason: "Not a common browser" };
-	}
-
-	return { shouldLog: false, reason: "Likely a browser pre-fetch" };
 }
 
 export async function GET(req: NextRequest, context: any) {
@@ -119,33 +36,46 @@ export async function GET(req: NextRequest, context: any) {
 		req.headers.get("x-real-ip") ||
 		"unknown";
 	const userAgent = req.headers.get("user-agent") || "unknown";
-	const accept = req.headers.get("accept") || "";
 	const timestamp = new Date().toISOString();
 
 	if (!openedEmails[id]) {
 		openedEmails[id] = [];
 	}
 
-	const { shouldLog, reason } = shouldLogAsRealOpen(
-		userAgent,
-		accept,
-		openedEmails[id],
-		ip
+	// Check if it's a known bot
+	const isBot = isKnownBot(userAgent);
+
+	// Get last log from this IP (for deduplication)
+	const now = Date.now();
+	const recentLogFromIP = openedEmails[id].find(
+		(log) => log.ip === ip && now - new Date(log.timestamp).getTime() < 30000 // 30 seconds
 	);
+
+	// Log as real open if:
+	// 1. Not a known bot, AND
+	// 2. Not a duplicate within 30 seconds
+	const isRealOpen = !isBot && !recentLogFromIP;
+
+	let reason: string | undefined;
+	if (isBot) {
+		reason = "Known bot detected";
+	} else if (recentLogFromIP) {
+		reason = "Duplicate request within 30 seconds";
+	}
 
 	const logEntry: EmailLog = {
 		timestamp,
 		ip,
 		userAgent,
-		isRealOpen: shouldLog,
-		reason: shouldLog ? undefined : reason,
+		isRealOpen,
+		reason,
 	};
 
 	openedEmails[id].push(logEntry);
 
-	// Optional: Keep only last 100 logs per ID to prevent memory issues
-	if (openedEmails[id].length > 100) {
-		openedEmails[id] = openedEmails[id].slice(-100);
+	// Keep only last 200 logs
+	if (openedEmails[id].length > 200) {
+		openedEmails[id] = openedEmails[id].slice(-200);
 	}
 
 	// Return 1x1 transparent pixel
