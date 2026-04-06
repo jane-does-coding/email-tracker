@@ -6,20 +6,14 @@ export async function GET(req: NextRequest, context: any) {
 		context.params instanceof Promise ? await context.params : context.params;
 	const id = params.id;
 
-	// Return formatted strings for display (backward compatible with your frontend)
 	const logs = openedEmails[id] || [];
 
-	// Format logs as strings for the existing frontend
+	// Format logs for display
 	const formattedLogs = logs.map((log) => {
 		if (log.isRealOpen) {
-			return `✅ ${log.timestamp} - ${log.ip} - ${log.userAgent.substring(
-				0,
-				100
-			)}`;
+			return `✅ REAL OPEN: ${log.timestamp} - ${log.ip} - ${log.userAgent}`;
 		} else {
-			return `🚫 ${log.timestamp} - ${log.ip} - [FILTERED: ${
-				log.reason
-			}] - ${log.userAgent.substring(0, 80)}`;
+			return `🚫 FILTERED: ${log.timestamp} - ${log.ip} - [${log.reason}] - ${log.userAgent}`;
 		}
 	});
 

@@ -1,10 +1,8 @@
 import { NextRequest } from "next/server";
 import { openedEmails, EmailLog } from "../shared";
 
-// Only filter out known bots, not regular browsers
-const botPatterns = [
-	"googleimageproxy",
-	"googleusercontent",
+// Only filter out actual crawlers that don't represent real opens
+const crawlerPatterns = [
 	"facebookexternalhit",
 	"linkedinbot",
 	"slackbot",
@@ -19,11 +17,44 @@ const botPatterns = [
 	"ahrefs",
 	"semrush",
 	"mj12bot",
+	"applebot",
+	"crawler",
+	"spider",
 ];
 
-function isKnownBot(userAgent: string): boolean {
+// Email service proxies that ARE real opens (not bots)
+const emailProxyPatterns = [
+	"googleimageproxy", // Gmail
+	"googleusercontent", // Gmail
+	"outlook", // Outlook/Hotmail
+	"mail.yahoo", // Yahoo Mail
+	"protonmail", // ProtonMail
+	"icloud", // iCloud Mail
+	"aol mail", // AOL Mail
+];
+
+function shouldCountAsRealOpen(userAgent: string): {
+	isReal: boolean;
+	reason: string;
+} {
 	const lowerUA = userAgent.toLowerCase();
-	return botPatterns.some((pattern) => lowerUA.includes(pattern));
+
+	// Check if it's an email service proxy (these ARE real opens)
+	for (const pattern of emailProxyPatterns) {
+		if (lowerUA.includes(pattern)) {
+			return { isReal: true, reason: "Email service proxy" };
+		}
+	}
+
+	// Check if it's a crawler/bot (these are NOT real opens)
+	for (const pattern of crawlerPatterns) {
+		if (lowerUA.includes(pattern)) {
+			return { isReal: false, reason: "Crawler/bot" };
+		}
+	}
+
+	// Regular browsers and unknown user agents count as real opens
+	return { isReal: true, reason: "Direct browser or email client" };
 }
 
 export async function GET(req: NextRequest, context: any) {
@@ -42,25 +73,28 @@ export async function GET(req: NextRequest, context: any) {
 		openedEmails[id] = [];
 	}
 
-	// Check if it's a known bot
-	const isBot = isKnownBot(userAgent);
+	// Check if this request should count as a real open
+	const { isReal: shouldCountAsReal, reason: classificationReason } =
+		shouldCountAsRealOpen(userAgent);
 
-	// Get last log from this IP (for deduplication)
-	const now = Date.now();
-	const recentLogFromIP = openedEmails[id].find(
-		(log) => log.ip === ip && now - new Date(log.timestamp).getTime() < 30000 // 30 seconds
+	// Deduplication: Only count one open per email ID per hour (to prevent counting multiple image loads)
+	const oneHourAgo = Date.now() - 60 * 60 * 1000;
+	const recentRealOpen = openedEmails[id].find(
+		(log) =>
+			log.isRealOpen === true && new Date(log.timestamp).getTime() > oneHourAgo
 	);
 
-	// Log as real open if:
-	// 1. Not a known bot, AND
-	// 2. Not a duplicate within 30 seconds
-	const isRealOpen = !isBot && !recentLogFromIP;
-
+	// Determine if this specific request should be marked as a real open
+	let isRealOpen = false;
 	let reason: string | undefined;
-	if (isBot) {
-		reason = "Known bot detected";
-	} else if (recentLogFromIP) {
-		reason = "Duplicate request within 30 seconds";
+
+	if (recentRealOpen && shouldCountAsReal) {
+		reason = `Already counted a real open from this email within the last hour (${classificationReason})`;
+	} else if (shouldCountAsReal) {
+		isRealOpen = true;
+		reason = classificationReason;
+	} else {
+		reason = classificationReason;
 	}
 
 	const logEntry: EmailLog = {
@@ -73,7 +107,7 @@ export async function GET(req: NextRequest, context: any) {
 
 	openedEmails[id].push(logEntry);
 
-	// Keep only last 200 logs
+	// Keep only last 200 logs per ID
 	if (openedEmails[id].length > 200) {
 		openedEmails[id] = openedEmails[id].slice(-200);
 	}
