@@ -6,7 +6,15 @@ export async function GET(req: NextRequest, context: any) {
 		context.params instanceof Promise ? await context.params : context.params;
 	const id = params.id;
 
-	return new Response(JSON.stringify(openedEmails[id] || []), {
-		headers: { "Content-Type": "application/json" },
+	// Return only real opens
+	const realOpens = (openedEmails[id] || []).filter(
+		(log) => log.isRealOpen === true
+	);
+
+	return new Response(JSON.stringify(realOpens), {
+		headers: {
+			"Content-Type": "application/json",
+			"Cache-Control": "no-cache",
+		},
 	});
 }
