@@ -4,6 +4,8 @@ export interface EmailLog {
 	userAgent: string;
 	isRealOpen: boolean;
 	reason?: string;
+	priority?: number; // Add priority field
+	type?: string; // Add type field
 }
 
 export const openedEmails: { [id: string]: EmailLog[] } = {};

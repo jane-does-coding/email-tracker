@@ -22,7 +22,7 @@ const crawlerPatterns = [
 	"spider",
 ];
 
-// Email service proxies that ARE real opens (not bots)
+// Email service proxies that ARE real opens (these are the most reliable indicators)
 const emailProxyPatterns = [
 	"googleimageproxy", // Gmail
 	"googleusercontent", // Gmail
@@ -33,28 +33,41 @@ const emailProxyPatterns = [
 	"aol mail", // AOL Mail
 ];
 
-function shouldCountAsRealOpen(userAgent: string): {
+function getRequestType(userAgent: string): {
+	type: string;
+	priority: number;
 	isReal: boolean;
-	reason: string;
 } {
 	const lowerUA = userAgent.toLowerCase();
 
-	// Check if it's an email service proxy (these ARE real opens)
+	// Email service proxies (highest priority - definitely real opens)
 	for (const pattern of emailProxyPatterns) {
 		if (lowerUA.includes(pattern)) {
-			return { isReal: true, reason: "Email service proxy" };
+			return { type: "email_proxy", priority: 3, isReal: true };
 		}
 	}
 
-	// Check if it's a crawler/bot (these are NOT real opens)
+	// Direct browsers or email clients (medium priority - could be previews)
+	const isBrowser =
+		lowerUA.includes("chrome") ||
+		lowerUA.includes("safari") ||
+		lowerUA.includes("firefox") ||
+		lowerUA.includes("edge") ||
+		lowerUA.includes("opera");
+
+	if (isBrowser) {
+		return { type: "browser", priority: 2, isReal: true };
+	}
+
+	// Crawlers/Bots (lowest priority - not real opens)
 	for (const pattern of crawlerPatterns) {
 		if (lowerUA.includes(pattern)) {
-			return { isReal: false, reason: "Crawler/bot" };
+			return { type: "crawler", priority: 0, isReal: false };
 		}
 	}
 
-	// Regular browsers and unknown user agents count as real opens
-	return { isReal: true, reason: "Direct browser or email client" };
+	// Unknown (treat as potential real open, medium priority)
+	return { type: "unknown", priority: 1, isReal: true };
 }
 
 export async function GET(req: NextRequest, context: any) {
@@ -73,36 +86,64 @@ export async function GET(req: NextRequest, context: any) {
 		openedEmails[id] = [];
 	}
 
-	// Check if this request should count as a real open
-	const { isReal: shouldCountAsReal, reason: classificationReason } =
-		shouldCountAsRealOpen(userAgent);
+	// Get request type and priority
+	const requestInfo = getRequestType(userAgent);
 
-	// Deduplication: Only count one open per email ID per hour (to prevent counting multiple image loads)
-	const oneHourAgo = Date.now() - 60 * 60 * 1000;
-	const recentRealOpen = openedEmails[id].find(
-		(log) =>
-			log.isRealOpen === true && new Date(log.timestamp).getTime() > oneHourAgo
+	// Check if we already have a real open for this email
+	const existingRealOpens = openedEmails[id].filter(
+		(log) => log.isRealOpen === true
 	);
 
-	// Determine if this specific request should be marked as a real open
 	let isRealOpen = false;
 	let reason: string | undefined;
 
-	if (recentRealOpen && shouldCountAsReal) {
-		reason = `Already counted a real open from this email within the last hour (${classificationReason})`;
-	} else if (shouldCountAsReal) {
+	if (!requestInfo.isReal) {
+		// It's a crawler - definitely not a real open
+		reason = `Crawler detected: ${requestInfo.type}`;
+	} else if (existingRealOpens.length === 0) {
+		// First real open - always count it
 		isRealOpen = true;
-		reason = classificationReason;
+		reason =
+			requestInfo.type === "email_proxy"
+				? "Email service proxy (real open)"
+				: "First open from browser/email client";
 	} else {
-		reason = classificationReason;
+		// We already have at least one real open - check if this one has higher priority
+		const highestPriorityExisting = Math.max(
+			...existingRealOpens.map((log) => log.priority || 0)
+		);
+
+		if (requestInfo.priority > highestPriorityExisting) {
+			// This request has higher priority (e.g., email proxy vs browser)
+			// Mark all previous real opens as filtered and make this the new real open
+			openedEmails[id] = openedEmails[id].map((log) => {
+				if (log.isRealOpen === true) {
+					return {
+						...log,
+						isRealOpen: false,
+						reason: `Overridden by higher priority request (${requestInfo.type})`,
+					};
+				}
+				return log;
+			});
+			isRealOpen = true;
+			reason = `Higher priority request (${requestInfo.type}) overrode previous opens`;
+		} else {
+			// Lower or equal priority - filter this one
+			reason = `Already have a real open (${
+				existingRealOpens[0].type || "unknown"
+			}) with equal or higher priority`;
+		}
 	}
 
-	const logEntry: EmailLog = {
+	const logEntry: EmailLog & { priority?: number; type?: string } = {
 		timestamp,
 		ip,
 		userAgent,
 		isRealOpen,
 		reason,
+		priority: requestInfo.priority,
+		type: requestInfo.type,
 	};
 
 	openedEmails[id].push(logEntry);

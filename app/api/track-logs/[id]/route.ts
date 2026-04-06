@@ -8,12 +8,22 @@ export async function GET(req: NextRequest, context: any) {
 
 	const logs = openedEmails[id] || [];
 
+	// Sort by timestamp to show chronological order
+	const sortedLogs = [...logs].sort(
+		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+	);
+
 	// Format logs for display
-	const formattedLogs = logs.map((log) => {
+	const formattedLogs = sortedLogs.map((log) => {
 		if (log.isRealOpen) {
-			return `✅ REAL OPEN: ${log.timestamp} - ${log.ip} - ${log.userAgent}`;
+			let typeIndicator = "";
+			if (log.type === "email_proxy") typeIndicator = "📧";
+			else if (log.type === "browser") typeIndicator = "🌐";
+			else typeIndicator = "✅";
+
+			return `${typeIndicator} REAL OPEN: ${log.timestamp} - ${log.ip} - ${log.userAgent} [${log.reason}]`;
 		} else {
-			return `🚫 FILTERED: ${log.timestamp} - ${log.ip} - [${log.reason}] - ${log.userAgent}`;
+			return `🚫 FILTERED: ${log.timestamp} - ${log.ip} - ${log.reason} - ${log.userAgent}`;
 		}
 	});
 

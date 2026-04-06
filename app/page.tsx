@@ -31,7 +31,7 @@ export default function Home() {
 	}, [trackingId]);
 
 	// Count real opens
-	const realOpens = logs.filter((log) => log.includes("✅ REAL OPEN"));
+	const realOpens = logs.filter((log) => log.includes("REAL OPEN"));
 
 	return (
 		<div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -40,7 +40,7 @@ export default function Home() {
 					📧 Email Tracker Generator
 				</h1>
 				<p className="text-gray-600 mb-6 text-center max-w-md">
-					Generate a tracking pixel and track when your emails are opened
+					Track when your emails are opened with smart priority detection
 				</p>
 
 				<button
@@ -69,14 +69,20 @@ export default function Home() {
 						/>
 
 						<div className="mt-4 bg-blue-50 p-3 rounded text-sm">
-							<p className="font-semibold">📌 Instructions:</p>
+							<p className="font-semibold">📌 Smart Priority System:</p>
 							<p className="text-gray-600 mt-1">
-								Copy the HTML code above and paste it into your email's HTML
-								body.
+								📧 Email proxies (Gmail, Outlook) have highest priority →
+								counted as real opens
+							</p>
+							<p className="text-gray-600">
+								🌐 Browsers have medium priority → counted only if no email
+								proxy is detected
+							</p>
+							<p className="text-gray-600">
+								🤖 Crawlers (Facebook, LinkedIn bots) are filtered out
 							</p>
 							<p className="text-gray-600 text-xs mt-2">
-								The tracker will only count ONE open per email ID per hour to
-								prevent duplicate counting.
+								This ensures the most reliable open source is always counted!
 							</p>
 						</div>
 
@@ -93,7 +99,7 @@ export default function Home() {
 									<div
 										key={i}
 										className={`p-2 rounded text-sm font-mono ${
-											log.includes("✅")
+											log.includes("REAL OPEN")
 												? "bg-green-50 border-l-4 border-green-500 text-green-800"
 												: "bg-gray-50 border-l-4 border-gray-400 text-gray-600"
 										}`}
@@ -109,26 +115,27 @@ export default function Home() {
 						)}
 
 						<div className="mt-6 text-xs text-gray-500 border-t pt-4">
-							<p className="font-semibold">How it works:</p>
-							<ul className="list-disc list-inside mt-1 space-y-1">
+							<p className="font-semibold">
+								Priority System (highest to lowest):
+							</p>
+							<ol className="list-decimal list-inside mt-1 space-y-1">
 								<li>
-									✅ <strong>Real opens</strong> include: Gmail
-									(GoogleImageProxy), Outlook, Yahoo, direct browsers, and email
-									clients
+									<strong>📧 Email proxies</strong> (Gmail, Outlook, Yahoo) -
+									Most reliable open indicator
 								</li>
 								<li>
-									🚫 <strong>Filtered out</strong>: Social media bots (Facebook,
-									LinkedIn, Slack), search engine crawlers
+									<strong>🌐 Browsers/Email clients</strong> - Could be
+									previews, but usually real
 								</li>
 								<li>
-									⏰ Only one open per email ID is counted per hour to prevent
-									duplicate tracking
+									<strong>🤖 Crawlers</strong> (Social media bots, search
+									engines) - Filtered out
 								</li>
-								<li>
-									📧 The tracking pixel is a 1x1 transparent image that loads
-									when the email is opened
-								</li>
-							</ul>
+							</ol>
+							<p className="mt-2">
+								If an email proxy open is detected after a browser open, it will
+								override the browser open.
+							</p>
 						</div>
 					</div>
 				)}
