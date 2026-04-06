@@ -17,7 +17,6 @@ export default function Home() {
 	const emailHTML =
 		trackingUrl && `<img src="${trackingUrl}" width="1" height="1" alt="" />`;
 
-	// Poll the server every 2 seconds to see if email has been opened
 	useEffect(() => {
 		if (!trackingId) return;
 		const interval = setInterval(async () => {
@@ -29,34 +28,56 @@ export default function Home() {
 	}, [trackingId]);
 
 	return (
-		<div style={{ padding: "40px", fontFamily: "sans-serif" }}>
-			<h1>Email Tracker Generator</h1>
-			<button onClick={generate}>Generate Tracking Pixel</button>
+		<div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+			<div className="flex flex-col border border-dashed p-[2vh]">
+				<h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center gap-2 ">
+					Email Tracker Generator
+				</h1>
+				<p className="text-gray-600 mb-6 text-center max-w-md">
+					Generate a tracking pixel for your emails and see when they are
+					opened.
+				</p>
 
-			{trackingId && (
-				<>
-					<p>Tracking URL:</p>
-					<code>{trackingUrl}</code>
+				<button
+					onClick={generate}
+					className="bg-neutral-900 hover:bg-neutral-800 text-white font-semibold py-3 px-6 border border-dashed transition-colors"
+				>
+					Generate Tracking Pixel
+				</button>
 
-					<p style={{ marginTop: 20 }}>Embed this in your email:</p>
-					<textarea
-						readOnly
-						value={emailHTML}
-						style={{ width: "100%", height: 100 }}
-					/>
+				{trackingId && (
+					<div className="bg-white border border-dashed p-6 mt-8 w-full max-w-xl">
+						<h2 className="text-xl font-semibold text-gray-800 mb-2">
+							Tracking URL
+						</h2>
+						<code className="block bg-gray-100 rounded-md p-3 break-all text-sm text-gray-700">
+							{trackingUrl}
+						</code>
 
-					<h2 style={{ marginTop: 20 }}>Opened Logs:</h2>
-					{logs.length ? (
-						<ul>
-							{logs.map((log, i) => (
-								<li key={i}>{log}</li>
-							))}
-						</ul>
-					) : (
-						<p>No opens yet</p>
-					)}
-				</>
-			)}
+						<h2 className="text-xl font-semibold text-gray-800 mt-6 mb-2">
+							Embed in your email
+						</h2>
+						<textarea
+							readOnly
+							value={emailHTML}
+							className="w-full h-24 p-3 rounded-md border border-gray-200 text-sm font-mono bg-gray-50 text-gray-700"
+						/>
+
+						<h2 className="text-xl font-semibold text-gray-800 mt-6 mb-2">
+							Opened Logs
+						</h2>
+						{logs.length ? (
+							<ul className="list-disc list-inside text-gray-700">
+								{logs.map((log, i) => (
+									<li key={i}>{log}</li>
+								))}
+							</ul>
+						) : (
+							<p className="text-gray-400">No opens yet</p>
+						)}
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }
